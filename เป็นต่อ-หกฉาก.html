@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>เมนู collapsible + โลโก้ + Remote + Group + Search</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: black;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    #container {
+      display: flex;
+      height: 70%;
+      width: 100%;
+    }
+    #menuOverlay {
+      width: 260px;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 10px;
+      box-sizing: border-box;
+      color: white;
+    }
+    .group {
+      margin-bottom: 10px;
+    }
+    .group-title {
+      font-weight: bold;
+      padding: 8px;
+      background: #7e57c2;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .group-items {
+      display: none;
+      padding-top: 5px;
+    }
+    .menu-item {
+      min-height: 100px;
+      background: #fff;
+      color: #000;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+      padding: 5px;
+      margin-top: 8px;
+    }
+    .menu-item img {
+      width: 100%;
+      height: 70px;
+      object-fit: contain;
+      margin-bottom: 5px;
+    }
+    .menu-item.active {
+      background: #e53935;
+      color: #fff;
+      outline: 3px solid yellow;
+    }
+    #videoContainer {
+      flex: 1;
+      background: black;
+      position: relative;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      background: black;
+    }
+    #searchInput {
+      padding: 6px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      border: none;
+      font-size: 14px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="menuOverlay">
+      <input type="text" id="searchInput" placeholder="ค้นหาชื่อวิดีโอ...">
+      <div id="menuList"></div>
+    </div>
+    <div id="videoContainer">
+      <video id="video" controls autoplay></video>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const menuList = document.getElementById('menuList');
+    const searchInput = document.getElementById('searchInput');
+    let currentIndex = 0;
+    let playlist = [];
+    let filteredPlaylist = [];
+    let groupMap = {};
+
+    const m3uUrl = "https://dl.dropbox.com/scl/fi/kt5gqj2n6775le6duerh4/.m3u?rlkey=rxs8qrjpo5oosrolui1wap1xn&dl=1";
+
+    async function loadPlaylist() {
+      const res = await fetch(m3uUrl);
+      const text = await res.text();
+      const lines = text.split("\n");
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith("#EXTINF")) {
+          const info = lines[i];
+          const url = lines[i + 1];
+          const titleMatch = info.match(/,(.*)/);
+          const logoMatch = info.match(/tvg-logo="([^"]+)"/);
+          const groupMatch = info.match(/group-title="([^"]+)"/);
+          const title = titleMatch ? titleMatch[1].trim() : "No Title";
+          const logo = logoMatch ? logoMatch[1].trim() : "";
+          const group = groupMatch ? groupMatch[1].trim() : "อื่นๆ";
+
+          playlist.push({ title, url, logo, group });
+        }
+      }
+
+      filteredPlaylist = [...playlist];
+      createMenu();
+      playVideo(currentIndex);
+    }
+
+    function createMenu() {
+      menuList.innerHTML = '';
+      const groups = {};
+
+      filteredPlaylist.forEach((item, index) => {
+        if (!groups[item.group]) groups[item.group] = [];
+        groups[item.group].push({ ...item, index });
+      });
+
+      Object.entries(groups).forEach(([groupName, items]) => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'group';
+
+        const header = document.createElement('div');
+        header.className = 'group-title';
+        header.textContent = groupName;
+        header.onclick = () => {
+          groupItems.style.display = groupItems.style.display === 'none' ? 'block' : 'none';
+        };
+
+        const groupItems = document.createElement('div');
+        groupItems.className = 'group-items';
+
+        items.forEach(({ title, url, logo, index }) => {
+          const div = document.createElement('div');
+          div.className = 'menu-item';
+          div.dataset.index = index;
+          if (index === currentIndex) div.classList.add('active');
+
+          if (logo) {
+            const img = document.createElement('img');
+            img.src = logo;
+            div.appendChild(img);
+          }
+
+          const titleDiv = document.createElement('div');
+          titleDiv.textContent = title;
+          div.appendChild(titleDiv);
+
+          div.onclick = () => playVideo(index);
+          groupItems.appendChild(div);
+        });
+
+        groupDiv.appendChild(header);
+        groupDiv.appendChild(groupItems);
+        menuList.appendChild(groupDiv);
+      });
+    }
+
+    function playVideo(index) {
+      currentIndex = index;
+      document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+      const items = document.querySelectorAll('.menu-item');
+      const targetItem = [...items].find(el => el.dataset.index == index);
+      if (targetItem) {
+        targetItem.classList.add('active');
+        targetItem.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      video.src = filteredPlaylist[index].url;
+      video.play();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      const key = e.key;
+
+      if (key === 'ArrowDown') {
+        currentIndex = (currentIndex + 1) % filteredPlaylist.length;
+        updateActiveItem();
+      } else if (key === 'ArrowUp') {
+        currentIndex = (currentIndex - 1 + filteredPlaylist.length) % filteredPlaylist.length;
+        updateActiveItem();
+      } else if (key === 'Enter') {
+        playVideo(currentIndex);
+      }
+    });
+
+    function updateActiveItem() {
+      const items = document.querySelectorAll('.menu-item');
+      items.forEach(el => el.classList.remove('active'));
+      const item = items[currentIndex];
+      if (item) {
+        item.classList.add('active');
+        item.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.toLowerCase();
+      filteredPlaylist = playlist.filter(item => item.title.toLowerCase().includes(query));
+      currentIndex = 0;
+      createMenu();
+    });
+
+    loadPlaylist();
+  </script>
+</body>
+</html>
